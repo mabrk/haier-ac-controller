@@ -1,6 +1,8 @@
 # Haier AC Controller
 
 A simple self-hosted web app to control your GE / Haier SmartHQ air conditioner from any browser — desktop or phone — without using the official app.
+Created as a much more responsive and less fussy replacement to the SmartHQ app
+
 
 ---
 
