@@ -200,6 +200,82 @@
     background: rgba(99,102,241,.1);
   }
 
+  /* ── Sleep timer ─────────────────────────────────────────── */
+  .timer-card { padding: 12px 16px; }
+  .timer-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .timer-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+  .timer-lbl { font-size: .74rem; color: var(--muted); letter-spacing: .05em; flex: 1; }
+  .timer-countdown {
+    font-size: .74rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  #timer-cancel {
+    display: none;
+    font-size: .65rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    background: transparent;
+    border-radius: 5px;
+    padding: 1px 6px;
+    cursor: pointer;
+    line-height: 1.6;
+  }
+  #timer-cancel:hover { border-color: var(--off); color: var(--off); }
+  .timer-body {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .timer-body.open { display: flex; }
+  .timer-presets { display: flex; gap: 6px; }
+  .timer-preset {
+    flex: 1;
+    padding: 6px 2px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: .72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .timer-preset:hover { border-color: var(--text); color: var(--text); }
+  .timer-custom { display: flex; gap: 6px; }
+  .timer-custom input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: .76rem;
+  }
+  .timer-custom input::placeholder { color: var(--muted); }
+  .timer-custom input:focus { outline: none; border-color: var(--accent); }
+  .timer-set {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-size: .74rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s;
+  }
+  .timer-set:hover { background: rgba(14,165,233,.12); }
+
   /* ── Desktop layout (≥ 720px) ────────────────────────────── */
   @media (min-width: 720px) {
     body { padding: 36px 48px 60px; }
@@ -287,6 +363,28 @@
           <div id="ambient"></div>
         </div>
         <button class="temp-btn" id="btn-plus" onclick="adjustTemp(+1)">+</button>
+      </div>
+    </div>
+
+    <div class="card timer-card">
+      <div class="timer-header" onclick="toggleTimerBody()">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" class="timer-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+        <span class="timer-lbl">Sleep timer</span>
+        <span id="timer-countdown" class="timer-countdown"></span>
+        <button id="timer-cancel" onclick="cancelTimer(event)">Cancel</button>
+      </div>
+      <div id="timer-body" class="timer-body">
+        <div class="timer-presets">
+          <button class="timer-preset" onclick="applyTimer(30)">30 min</button>
+          <button class="timer-preset" onclick="applyTimer(60)">1 hr</button>
+          <button class="timer-preset" onclick="applyTimer(120)">2 hr</button>
+          <button class="timer-preset" onclick="applyTimer(240)">4 hr</button>
+        </div>
+        <div class="timer-custom">
+          <input type="number" id="timer-minutes" placeholder="Custom minutes" min="1" max="1440"
+            onkeydown="if(event.key==='Enter')applyCustomTimer()">
+          <button class="timer-set" onclick="applyCustomTimer()">Set</button>
+        </div>
       </div>
     </div>
 
@@ -398,7 +496,90 @@
     document.getElementById('error-banner').style.display = 'none';
   }
 
+  // ── Sleep timer ──────────────────────────────────────────────
+  let timerEndsAt = null;
+  let timerTick = null;
+
+  function toggleTimerBody() {
+    document.getElementById('timer-body').classList.toggle('open');
+  }
+
+  async function applyTimer(minutes) {
+    try {
+      const r = await fetch('/api/timer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      renderTimer(await r.json());
+      document.getElementById('timer-body').classList.remove('open');
+      document.getElementById('timer-minutes').value = '';
+    } catch (e) { showError('Timer: ' + e.message); }
+  }
+
+  async function applyCustomTimer() {
+    const val = parseInt(document.getElementById('timer-minutes').value, 10);
+    if (!val || val < 1 || val > 1440) return;
+    await applyTimer(val);
+  }
+
+  async function cancelTimer(e) {
+    e.stopPropagation();
+    try {
+      const r = await fetch('/api/timer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: null }),
+      });
+      renderTimer(await r.json());
+      document.getElementById('timer-body').classList.remove('open');
+    } catch (e) { showError('Timer: ' + e.message); }
+  }
+
+  async function checkTimer() {
+    try {
+      const r = await fetch('/api/timer');
+      renderTimer(await r.json());
+    } catch(e) {}
+  }
+
+  function renderTimer(data) {
+    const cancelBtn = document.getElementById('timer-cancel');
+    const countdown = document.getElementById('timer-countdown');
+    if (data.active) {
+      timerEndsAt = new Date(data.ends_at);
+      cancelBtn.style.display = 'inline-block';
+      if (!timerTick) timerTick = setInterval(tickCountdown, 1000);
+      tickCountdown();
+    } else {
+      timerEndsAt = null;
+      cancelBtn.style.display = 'none';
+      countdown.textContent = '';
+      if (timerTick) { clearInterval(timerTick); timerTick = null; }
+    }
+  }
+
+  function tickCountdown() {
+    if (!timerEndsAt) return;
+    const rem = Math.max(0, Math.round((timerEndsAt - Date.now()) / 1000));
+    const h = Math.floor(rem / 3600);
+    const m = Math.floor((rem % 3600) / 60);
+    const s = rem % 60;
+    let txt;
+    if (h > 0)      txt = `Off in ${h}h ${m}m`;
+    else if (m > 1) txt = `Off in ${m}m`;
+    else            txt = `Off in ${rem}s`;
+    document.getElementById('timer-countdown').textContent = txt;
+    if (rem === 0) {
+      clearInterval(timerTick); timerTick = null; timerEndsAt = null;
+      document.getElementById('timer-cancel').style.display = 'none';
+      document.getElementById('timer-countdown').textContent = '';
+    }
+  }
+
   refresh();
+  checkTimer();
   setInterval(refresh, 30000);
 </script>
 </body>

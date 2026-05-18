@@ -9,10 +9,12 @@ Open:   http://<server-ip>:8765
 Auth:   Automatic — LAN requests pass through freely.
         External requests require login (AUTH_USERNAME / AUTH_PASSWORD in .env).
 """
+import asyncio
 import os
 import socket
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -37,6 +39,8 @@ DEVICE_ID = os.getenv("SMARTHQ_DEVICE_ID", "").strip()
 REGION    = os.getenv("SMARTHQ_REGION", "US").strip()
 
 _client = None
+_timer_task: asyncio.Task | None = None
+_timer_ends_at: datetime | None = None
 
 
 def _get_lan_ip() -> str:
@@ -77,6 +81,8 @@ async def lifespan(app: FastAPI):
         log.info("External     ->  http://%s:8765  (needs port 8765 forwarded on router)", public_ip)
 
     yield
+    if _timer_task and not _timer_task.done():
+        _timer_task.cancel()
     if _client:
         await _client.stop()
 
@@ -195,3 +201,55 @@ async def control(req: ControlRequest):
         return await c.control(req.power, req.mode, req.temp, req.fan)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
+
+
+# ── Sleep timer ───────────────────────────────────────────────
+
+async def _run_timer(seconds: int):
+    global _timer_task, _timer_ends_at
+    try:
+        await asyncio.sleep(seconds)
+        if _client:
+            await _client.control("off", None, None, None)
+            log.info("Sleep timer fired — AC turned off")
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _timer_task = None
+        _timer_ends_at = None
+
+
+def _timer_status() -> dict:
+    if _timer_task is None or _timer_task.done():
+        return {"active": False, "remaining_seconds": None, "ends_at": None}
+    remaining = max(0, (_timer_ends_at - datetime.now(timezone.utc)).total_seconds())
+    return {
+        "active": True,
+        "remaining_seconds": int(remaining),
+        "ends_at": _timer_ends_at.isoformat(),
+    }
+
+
+class TimerRequest(BaseModel):
+    minutes: int | None = Field(default=None, ge=1, le=1440)
+
+
+@app.get("/api/timer")
+async def get_timer():
+    return _timer_status()
+
+
+@app.post("/api/timer")
+async def set_timer(req: TimerRequest):
+    global _timer_task, _timer_ends_at
+    if _timer_task and not _timer_task.done():
+        _timer_task.cancel()
+    _timer_task = None
+    _timer_ends_at = None
+
+    if req.minutes is not None:
+        _require_client()
+        _timer_ends_at = datetime.now(timezone.utc) + timedelta(minutes=req.minutes)
+        _timer_task = asyncio.create_task(_run_timer(req.minutes * 60))
+
+    return _timer_status()
