@@ -46,6 +46,7 @@ class SmartHQClient:
         self._connected = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._stopping = False
+        self._last_good_temp: int | None = None
 
     async def start(self):
         self._session = aiohttp.ClientSession()
@@ -144,15 +145,56 @@ class SmartHQClient:
             except Exception:
                 pass
 
+        # Sanitize target temp — SmartHQ occasionally returns junk (e.g. 18xxx)
+        # after long idle on fan mode. Clamp to a sane AC range; fall back to
+        # last known good value, then 68.
+        temp_out: int
+        if temp_val is not None:
+            try:
+                t = int(temp_val)
+            except (TypeError, ValueError):
+                t = None
+            if t is not None and 50 <= t <= 99:
+                self._last_good_temp = t
+                temp_out = t
+            else:
+                log.warning("Discarding bad target temp from device: %r", temp_val)
+                temp_out = self._last_good_temp if self._last_good_temp is not None else 68
+        else:
+            temp_out = self._last_good_temp if self._last_good_temp is not None else 68
+
+        amb_out: int | None
+        if ambient is not None:
+            try:
+                a_i = int(ambient)
+                amb_out = a_i if 0 <= a_i <= 150 else None
+            except (TypeError, ValueError):
+                amb_out = None
+        else:
+            amb_out = None
+
         return {
             "power":   "on"  if isinstance(power_val, ErdOnOff) and power_val == ErdOnOff.ON else "off",
             "mode":    _MODE_FROM_ERD.get(mode_val, "cool"),
-            "temp":    int(temp_val) if temp_val is not None else 68,
+            "temp":    temp_out,
             "fan":     _FAN_FROM_ERD.get(fan_val, "auto"),
-            "ambient": int(ambient) if ambient is not None else None,
+            "ambient": amb_out,
             "unit":    "F",
             "raw":     raw,
         }
+
+    async def request_refresh(self) -> bool:
+        """Ask the appliance to re-send its ERD values. Returns True on success."""
+        try:
+            a = self._appliance()
+        except RuntimeError:
+            return False
+        try:
+            await a.async_request_update()
+            return True
+        except Exception as e:
+            log.debug("request_refresh failed: %s", e)
+            return False
 
     async def control(self, power: str | None, mode: str | None,
                       temp: int | None, fan: str | None) -> dict:

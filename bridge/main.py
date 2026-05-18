@@ -41,6 +41,24 @@ REGION    = os.getenv("SMARTHQ_REGION", "US").strip()
 _client = None
 _timer_task: asyncio.Task | None = None
 _timer_ends_at: datetime | None = None
+_refresh_task: asyncio.Task | None = None
+
+REFRESH_INTERVAL_SECONDS = 60
+
+
+async def _periodic_refresh():
+    """Re-request ERD values every minute so a stale/corrupt cached reading
+    (e.g. the 18xxx target-temp glitch after long idle on fan mode) gets
+    overwritten by a fresh value from the device."""
+    while True:
+        try:
+            await asyncio.sleep(REFRESH_INTERVAL_SECONDS)
+            if _client is not None:
+                await _client.request_refresh()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.debug("Periodic refresh error: %s", e)
 
 
 def _get_lan_ip() -> str:
@@ -65,12 +83,13 @@ async def _get_public_ip() -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _client
+    global _client, _refresh_task
     if USERNAME and PASSWORD:
         from haier_smarthq import SmartHQClient
         _client = SmartHQClient(USERNAME, PASSWORD, DEVICE_ID, REGION)
         await _client.start()
         log.info("SmartHQ connected. Device ID: %s", DEVICE_ID or "(see /api/devices)")
+        _refresh_task = asyncio.create_task(_periodic_refresh())
     else:
         log.warning("SMARTHQ_USERNAME / SMARTHQ_PASSWORD not set — edit .env and restart.")
 
@@ -81,6 +100,8 @@ async def lifespan(app: FastAPI):
         log.info("External     ->  http://%s:8765  (needs port 8765 forwarded on router)", public_ip)
 
     yield
+    if _refresh_task and not _refresh_task.done():
+        _refresh_task.cancel()
     if _timer_task and not _timer_task.done():
         _timer_task.cancel()
     if _client:
