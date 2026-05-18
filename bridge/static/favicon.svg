@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Circular background -->
+  <circle cx="16" cy="16" r="16" fill="#0ea5e9"/>
+  <!-- AC unit body (wall-mounted split style) -->
+  <rect x="5" y="7" width="22" height="9" rx="3" fill="white"/>
+  <!-- Vent slat -->
+  <rect x="8" y="13" width="16" height="1.5" rx=".75" fill="#0ea5e9" opacity=".5"/>
+  <!-- Indicator dot -->
+  <circle cx="9.5" cy="10.5" r="1" fill="#0ea5e9" opacity=".4"/>
+  <!-- Airflow waves -->
+  <path d="M7 19.5 Q11.5 17 16 19.5 Q20.5 22 25 19.5" stroke="white" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+  <path d="M8 23   Q12   20.5 16 23   Q20   25.5 24 23"   stroke="white" stroke-width="1.7" fill="none" stroke-linecap="round" opacity=".6"/>
+</svg>
