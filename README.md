@@ -6,7 +6,11 @@ Created as a much more responsive and less fussy replacement to the SmartHQ app
 
 --- Preview - 
 
-<img width="1322" height="679" alt="image" src="https://github.com/user-attachments/assets/db0bac67-d102-4b15-8946-a0ebfd0408ae" />
+<img width="1121" height="567" alt="image" src="https://github.com/user-attachments/assets/d8486e01-9f4a-4683-ac60-41eaf253a9bf" />
+
+<img width="482" height="883" alt="image" src="https://github.com/user-attachments/assets/7416b793-eb9c-447c-b0f6-b28bab1e08c3" />
+
+
 
 
 ## Features
