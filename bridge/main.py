@@ -5,6 +5,9 @@ SmartHQ bridge + web UI in one process.
 Start:  uvicorn main:app --host 0.0.0.0 --port 8765
 Config: copy .env.example → .env and fill in credentials.
 Open:   http://<server-ip>:8765
+
+Auth:   Automatic — LAN requests pass through freely.
+        External requests require login (AUTH_USERNAME / AUTH_PASSWORD in .env).
 """
 import os
 import logging
@@ -13,9 +16,9 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -38,7 +41,7 @@ async def lifespan(app: FastAPI):
         from haier_smarthq import SmartHQClient
         _client = SmartHQClient(USERNAME, PASSWORD, DEVICE_ID, REGION)
         await _client.start()
-        log.info("SmartHQ connected. Device ID in use: %s", DEVICE_ID or "(see /api/devices)")
+        log.info("SmartHQ connected. Device ID: %s", DEVICE_ID or "(see /api/devices)")
     else:
         log.warning("SMARTHQ_USERNAME / SMARTHQ_PASSWORD not set — edit .env and restart.")
     yield
@@ -49,6 +52,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Haier AC", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Auth middleware — must be added AFTER CORS
+from auth import AuthMiddleware, AUTH_USERNAME, AUTH_PASSWORD, COOKIE_NAME, COOKIE_DAYS, make_token, verify_token, _login_page
+app.add_middleware(AuthMiddleware)
+
 STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -57,6 +64,38 @@ def _require_client():
     if _client is None:
         raise HTTPException(503, "SmartHQ credentials not configured — edit .env and restart")
     return _client
+
+
+# ── Auth routes ───────────────────────────────────────────────────
+
+@app.get("/login", include_in_schema=False)
+async def login_page():
+    return HTMLResponse(_login_page())
+
+
+@app.post("/login", include_in_schema=False)
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+        next_url = request.query_params.get("next", "/")
+        response = RedirectResponse(next_url, status_code=303)
+        response.set_cookie(
+            COOKIE_NAME, make_token(),
+            max_age=COOKIE_DAYS * 86400,
+            httponly=True, samesite="lax",
+        )
+        return response
+    return HTMLResponse(_login_page("Incorrect username or password."), status_code=401)
+
+
+@app.get("/logout", include_in_schema=False)
+async def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(COOKIE_NAME)
+    return response
 
 
 # ── UI ────────────────────────────────────────────────────────────
@@ -70,7 +109,6 @@ async def index():
 
 @app.get("/api/devices")
 async def list_devices():
-    """List all SmartHQ appliances on your account. Use this to find your device ID."""
     return _require_client().list_devices()
 
 
