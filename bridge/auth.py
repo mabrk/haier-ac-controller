@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 COOKIE_NAME = "ac_session"
 COOKIE_DAYS = 30
+_MAX_TOKEN_AGE = COOKIE_DAYS * 86400
 
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin")
@@ -54,7 +55,9 @@ def make_token() -> str:
 def verify_token(token: str) -> bool:
     try:
         ts, sig = token.split(".", 1)
-        return hmac.compare_digest(_sign(ts), sig)
+        if not hmac.compare_digest(_sign(ts), sig):
+            return False
+        return (time.time() - int(ts)) < _MAX_TOKEN_AGE
     except Exception:
         return False
 

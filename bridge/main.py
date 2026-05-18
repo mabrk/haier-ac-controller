@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -50,9 +50,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Haier AC", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Auth middleware — must be added AFTER CORS
+# Auth middleware
 from auth import AuthMiddleware, AUTH_USERNAME, AUTH_PASSWORD, COOKIE_NAME, COOKIE_DAYS, make_token, verify_token, _login_page
 app.add_middleware(AuthMiddleware)
 
@@ -81,6 +80,9 @@ async def login_submit(
 ):
     if username == AUTH_USERNAME and password == AUTH_PASSWORD:
         next_url = request.query_params.get("next", "/")
+        parsed = urlparse(next_url)
+        if parsed.scheme or parsed.netloc:
+            next_url = "/"
         response = RedirectResponse(next_url, status_code=303)
         response.set_cookie(
             COOKIE_NAME, make_token(),
