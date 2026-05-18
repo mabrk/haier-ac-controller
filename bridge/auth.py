@@ -3,6 +3,11 @@ Auth middleware — transparent on LAN, login required from outside.
 
 LAN detection uses Python's ipaddress.is_private which covers:
   10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, ::1, etc.
+
+TRUSTED_PROXY:  set to your reverse-proxy IP (e.g. "127.0.0.1") when running
+                behind Nginx/Caddy so X-Forwarded-For is used for the real
+                client IP. Leave blank (safe default) for direct exposure.
+SECURE_COOKIES: set to "true" when serving over HTTPS.
 """
 import hashlib
 import hmac
@@ -21,6 +26,9 @@ log = logging.getLogger(__name__)
 COOKIE_NAME = "ac_session"
 COOKIE_DAYS = 30
 _MAX_TOKEN_AGE = COOKIE_DAYS * 86400
+
+TRUSTED_PROXY  = os.getenv("TRUSTED_PROXY", "").strip()
+SECURE_COOKIES = os.getenv("SECURE_COOKIES", "").lower() in ("1", "true", "yes")
 
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin")
@@ -41,6 +49,15 @@ def is_local(ip: str) -> bool:
         return ipaddress.ip_address(ip).is_private
     except ValueError:
         return False
+
+
+def get_client_ip(request: Request) -> str:
+    """Return the real client IP, honouring X-Forwarded-For when TRUSTED_PROXY is set."""
+    ip = request.client.host if request.client else "127.0.0.1"
+    if TRUSTED_PROXY and ip == TRUSTED_PROXY:
+        xff = request.headers.get("X-Forwarded-For", "")
+        ip = xff.split(",")[0].strip() or ip
+    return ip
 
 
 def _sign(value: str) -> str:
@@ -143,7 +160,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Trusted if request comes from a private/LAN IP
-        client_ip = request.client.host if request.client else "127.0.0.1"
+        client_ip = get_client_ip(request)
         if is_local(client_ip):
             return await call_next(request)
 

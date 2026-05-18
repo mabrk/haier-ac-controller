@@ -21,6 +21,9 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -52,8 +55,31 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Haier AC", lifespan=lifespan)
 
 # Auth middleware
-from auth import AuthMiddleware, AUTH_USERNAME, AUTH_PASSWORD, COOKIE_NAME, COOKIE_DAYS, make_token, verify_token, _login_page
+from auth import (AuthMiddleware, AUTH_USERNAME, AUTH_PASSWORD,
+                  COOKIE_NAME, COOKIE_DAYS, SECURE_COOKIES,
+                  make_token, verify_token, get_client_ip, _login_page)
+
+limiter = Limiter(key_func=get_client_ip)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+class _SecurityHeaders(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'"
+        )
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
 app.add_middleware(AuthMiddleware)
+app.add_middleware(_SecurityHeaders)
 
 STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -73,6 +99,7 @@ async def login_page():
 
 
 @app.post("/login", include_in_schema=False)
+@limiter.limit("10/minute")
 async def login_submit(
     request: Request,
     username: str = Form(...),
@@ -87,7 +114,7 @@ async def login_submit(
         response.set_cookie(
             COOKIE_NAME, make_token(),
             max_age=COOKIE_DAYS * 86400,
-            httponly=True, samesite="lax",
+            httponly=True, samesite="lax", secure=SECURE_COOKIES,
         )
         return response
     return HTMLResponse(_login_page("Incorrect username or password."), status_code=401)

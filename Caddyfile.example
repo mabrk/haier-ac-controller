@@ -1,0 +1,12 @@
+# Caddyfile.example — copy to "Caddyfile", set your domain, then run: caddy run
+#
+# Caddy automatically provisions and renews a free TLS certificate (Let's Encrypt).
+# Install Caddy: https://caddyserver.com/docs/install
+#
+# After setting this up, add to bridge/.env:
+#   TRUSTED_PROXY=127.0.0.1
+#   SECURE_COOKIES=true
+
+your-domain.com {
+    reverse_proxy localhost:8765
+}
