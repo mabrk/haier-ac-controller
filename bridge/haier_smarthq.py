@@ -44,31 +44,50 @@ class SmartHQClient:
         self._session: aiohttp.ClientSession | None = None
         self._devices: list[dict] = []
         self._connected = asyncio.Event()
+        self._task: asyncio.Task | None = None
+        self._stopping = False
 
     async def start(self):
         self._session = aiohttp.ClientSession()
         self._client = GeWebsocketClient(self._username, self._password, self._region)
         self._client.add_event_handler(EVENT_ADD_APPLIANCE, self._on_add_appliance)
         self._client.add_event_handler(EVENT_APPLIANCE_STATE_CHANGE, self._on_state_change)
-        asyncio.create_task(self._run())
+        self._task = asyncio.create_task(self._run())
         try:
             await asyncio.wait_for(self._connected.wait(), timeout=10)
         except asyncio.TimeoutError:
             log.warning("SmartHQ connection timed out — continuing in background")
 
     async def stop(self):
+        self._stopping = True
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
         if self._client:
-            await self._client.disconnect()
-        if self._session:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+        if self._session and not self._session.closed:
             await self._session.close()
 
     async def _run(self):
-        while True:
+        while not self._stopping:
             try:
                 await self._client.async_get_credentials_and_run(self._session)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
+                if self._stopping:
+                    break
                 log.error("SmartHQ disconnected: %s — retrying in 15s", e)
-                await asyncio.sleep(15)
+                try:
+                    await asyncio.sleep(15)
+                except asyncio.CancelledError:
+                    break
 
     async def _on_add_appliance(self, appliance):
         mac = str(appliance.mac_addr)

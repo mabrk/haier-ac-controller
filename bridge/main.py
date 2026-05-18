@@ -10,6 +10,7 @@ Auth:   Automatic — LAN requests pass through freely.
         External requests require login (AUTH_USERNAME / AUTH_PASSWORD in .env).
 """
 import os
+import socket
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +22,7 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import httpx
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -37,6 +39,26 @@ REGION    = os.getenv("SMARTHQ_REGION", "US").strip()
 _client = None
 
 
+def _get_lan_ip() -> str:
+    """Return the LAN IP via the default-route interface."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+
+
+async def _get_public_ip() -> str | None:
+    """Return the public IP from api.ipify.org, or None on failure."""
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get("https://api.ipify.org", timeout=3.0)
+            return r.text.strip()
+    except Exception:
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _client
@@ -47,6 +69,13 @@ async def lifespan(app: FastAPI):
         log.info("SmartHQ connected. Device ID: %s", DEVICE_ID or "(see /api/devices)")
     else:
         log.warning("SMARTHQ_USERNAME / SMARTHQ_PASSWORD not set — edit .env and restart.")
+
+    lan_ip    = _get_lan_ip()
+    public_ip = await _get_public_ip()
+    log.info("Local  (LAN)  ->  http://%s:8765", lan_ip)
+    if public_ip:
+        log.info("External     ->  http://%s:8765  (needs port 8765 forwarded on router)", public_ip)
+
     yield
     if _client:
         await _client.stop()
