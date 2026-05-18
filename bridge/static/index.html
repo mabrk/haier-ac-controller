@@ -15,9 +15,11 @@
     --muted: #64748b;
     --on: #22c55e;
     --off: #ef4444;
-    --radius: 14px;
+    --radius: 16px;
   }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
     background: var(--bg);
     color: var(--text);
@@ -25,19 +27,29 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: 24px 16px 40px;
+    padding: 24px 16px 48px;
   }
 
+  /* ── Header ──────────────────────────────────────────────── */
   header {
-    width: 100%;
-    max-width: 420px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
+    padding: 0 4px;
   }
-  header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; }
+  header h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: .8rem;
+  }
   #status-dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--muted); transition: background .4s;
@@ -45,121 +57,198 @@
   #status-dot.ok  { background: var(--on); }
   #status-dot.err { background: var(--off); }
 
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    width: 100%;
-    max-width: 420px;
-    margin-bottom: 12px;
-  }
-  .card-title {
-    font-size: .7rem;
-    text-transform: uppercase;
-    letter-spacing: .1em;
-    color: var(--muted);
-    margin-bottom: 14px;
-  }
-
-  /* Power */
-  #power-btn {
-    display: block;
-    width: 100px; height: 100px;
-    border-radius: 50%;
-    border: 3px solid var(--border);
-    background: var(--card);
-    margin: 0 auto;
-    cursor: pointer;
-    transition: all .25s;
-    position: relative;
-    outline: none;
-  }
-  #power-btn svg { width: 44px; height: 44px; color: var(--muted); transition: color .25s; }
-  #power-btn.on {
-    border-color: var(--on);
-    box-shadow: 0 0 28px 4px rgba(34,197,94,.35);
-  }
-  #power-btn.on svg { color: var(--on); }
-  #power-label {
-    text-align: center;
-    margin-top: 10px;
-    font-size: .85rem;
-    color: var(--muted);
-    letter-spacing: .05em;
-    font-weight: 600;
-  }
-
-  /* Temp */
-  .temp-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-  }
-  .temp-btn {
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text);
-    font-size: 1.4rem;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background .15s;
-  }
-  .temp-btn:hover { background: var(--border); }
-  .temp-btn:disabled { opacity: .3; cursor: default; }
-  #ambient {
-    text-align: center;
-    font-size: .78rem;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-  #temp-display {
-    font-size: 3rem;
-    font-weight: 200;
-    min-width: 100px;
-    text-align: center;
-    line-height: 1;
-  }
-  #temp-display span { font-size: 1.1rem; color: var(--muted); vertical-align: super; }
-
-  /* Chips */
-  .chip-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .chip {
-    flex: 1;
-    padding: 10px 4px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--muted);
-    font-size: .78rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-    transition: all .15s;
-    white-space: nowrap;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .chip svg { width: 18px; height: 18px; }
-  .chip.active { border-color: var(--accent); color: var(--accent); background: rgba(14,165,233,.1); }
-  .chip.active.fan-chip { border-color: var(--accent2); color: var(--accent2); background: rgba(99,102,241,.1); }
-
+  /* ── Error banner ────────────────────────────────────────── */
   #error-banner {
     display: none;
-    width: 100%; max-width: 420px;
     background: rgba(239,68,68,.12);
     border: 1px solid rgba(239,68,68,.3);
     border-radius: var(--radius);
     padding: 12px 16px;
     font-size: .82rem;
     color: #fca5a5;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* ── Card ────────────────────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 100%;
+  }
+  .card-title {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  /* ── Layout grid ─────────────────────────────────────────── */
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
+  .left-col, .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ── Power ───────────────────────────────────────────────── */
+  #power-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+  }
+  #power-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    background: var(--card);
+    cursor: pointer;
+    transition: all .25s;
+    outline: none;
+  }
+  #power-btn svg { width: 48px; height: 48px; color: var(--muted); transition: color .25s; }
+  #power-btn.on {
+    border-color: var(--on);
+    box-shadow: 0 0 36px 6px rgba(34,197,94,.3);
+  }
+  #power-btn.on svg { color: var(--on); }
+  #power-label {
+    margin-top: 14px;
+    font-size: .85rem;
+    color: var(--muted);
+    letter-spacing: .08em;
+    font-weight: 700;
+  }
+
+  /* ── Temperature ─────────────────────────────────────────── */
+  .temp-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+  }
+  .temp-btn {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+    flex-shrink: 0;
+  }
+  .temp-btn:hover:not(:disabled) { background: var(--border); }
+  .temp-btn:disabled { opacity: .25; cursor: default; }
+  .temp-center { text-align: center; }
+  #temp-display {
+    font-size: 3.5rem;
+    font-weight: 200;
+    line-height: 1;
+    letter-spacing: -.02em;
+  }
+  #temp-display span { font-size: 1.2rem; color: var(--muted); vertical-align: super; }
+  #ambient {
+    margin-top: 6px;
+    font-size: .78rem;
+    color: var(--muted);
+  }
+
+  /* ── Chips (mode & fan) ──────────────────────────────────── */
+  .chip-row {
+    display: flex;
+    gap: 10px;
+  }
+  .chip {
+    flex: 1;
+    padding: 12px 6px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all .15s;
+    white-space: nowrap;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .chip svg { width: 20px; height: 20px; }
+  .chip:hover { border-color: var(--text); color: var(--text); }
+  .chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(14,165,233,.1);
+  }
+  .chip.active.fan-chip {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(99,102,241,.1);
+  }
+
+  /* ── Desktop layout (≥ 720px) ────────────────────────────── */
+  @media (min-width: 720px) {
+    body { padding: 36px 48px 60px; }
+
+    .layout {
+      flex-direction: row;
+      align-items: flex-start;
+      max-width: 960px;
+      margin: 0 auto;
+      width: 100%;
+      gap: 16px;
+    }
+
+    .left-col {
+      width: 300px;
+      flex-shrink: 0;
+    }
+
+    .right-col { flex: 1; }
+
+    #power-card { padding: 40px 24px; gap: 0; }
+    #power-btn { width: 130px; height: 130px; }
+    #power-btn svg { width: 56px; height: 56px; }
+
+    #temp-display { font-size: 4.5rem; }
+
+    .chip { padding: 14px 8px; font-size: .85rem; }
+
+    header {
+      max-width: 960px;
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+    }
+
+    #error-banner {
+      max-width: 960px;
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+    }
+  }
+
+  /* ── Large desktop (≥ 1200px) ────────────────────────────── */
+  @media (min-width: 1200px) {
+    .layout { max-width: 1100px; gap: 20px; }
+    header { max-width: 1100px; }
+    #error-banner { max-width: 1100px; }
+    .left-col { width: 340px; }
   }
 </style>
 </head>
@@ -167,69 +256,79 @@
 
 <header>
   <h1>AC Control</h1>
-  <div id="status-dot" title="Connection status"></div>
+  <div class="header-right">
+    <span id="status-text">Connecting…</span>
+    <div id="status-dot"></div>
+  </div>
 </header>
 
 <div id="error-banner"></div>
 
-<!-- Power -->
-<div class="card" style="text-align:center; padding: 28px 20px;">
-  <button id="power-btn" onclick="togglePower()" title="Toggle power">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-      <path stroke-linecap="round" stroke-linejoin="round"
-        d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"/>
-    </svg>
-  </button>
-  <div id="power-label">—</div>
-</div>
+<div class="layout">
 
-<!-- Temperature -->
-<div class="card">
-  <div class="card-title">Temperature</div>
-  <div class="temp-row">
-    <button class="temp-btn" id="btn-minus" onclick="adjustTemp(-1)">−</button>
-    <div>
-      <div id="temp-display">—<span>°F</span></div>
-      <div id="ambient"></div>
+  <!-- Left column: Power + Temperature -->
+  <div class="left-col">
+
+    <div class="card" id="power-card">
+      <button id="power-btn" onclick="togglePower()" title="Toggle power">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"/>
+        </svg>
+      </button>
+      <div id="power-label">—</div>
     </div>
-    <button class="temp-btn" id="btn-plus"  onclick="adjustTemp(+1)">+</button>
-  </div>
-</div>
 
-<!-- Mode -->
-<div class="card">
-  <div class="card-title">Mode</div>
-  <div class="chip-row">
-    <button class="chip" data-mode="cool" onclick="setMode('cool')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>
-      Cool
-    </button>
-    <button class="chip" data-mode="eco" onclick="setMode('eco')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c-4.97 5.97-3 10.5 0 12 3 1.5 5-1 5-3.5 0-2-1.5-3-3-2.5M12 3C7.03 8.97 9 13.5 12 15"/></svg>
-      Eco
-    </button>
-    <button class="chip" data-mode="fan" onclick="setMode('fan')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"/></svg>
-      Fan
-    </button>
-  </div>
-</div>
+    <div class="card">
+      <div class="card-title">Temperature</div>
+      <div class="temp-row">
+        <button class="temp-btn" id="btn-minus" onclick="adjustTemp(-1)">−</button>
+        <div class="temp-center">
+          <div id="temp-display">—<span>°F</span></div>
+          <div id="ambient"></div>
+        </div>
+        <button class="temp-btn" id="btn-plus" onclick="adjustTemp(+1)">+</button>
+      </div>
+    </div>
 
-<!-- Fan -->
-<div class="card">
-  <div class="card-title">Fan Speed</div>
-  <div class="chip-row">
-    <button class="chip fan-chip" data-fan="auto"   onclick="setFan('auto')">Auto</button>
-    <button class="chip fan-chip" data-fan="low"    onclick="setFan('low')">Low</button>
-    <button class="chip fan-chip" data-fan="medium" onclick="setFan('medium')">Medium</button>
-    <button class="chip fan-chip" data-fan="high"   onclick="setFan('high')">High</button>
+  </div>
+
+  <!-- Right column: Mode + Fan -->
+  <div class="right-col">
+
+    <div class="card">
+      <div class="card-title">Mode</div>
+      <div class="chip-row">
+        <button class="chip" data-mode="cool" onclick="setMode('cool')">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>
+          Cool
+        </button>
+        <button class="chip" data-mode="eco" onclick="setMode('eco')">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c-4.97 5.97-3 10.5 0 12 3 1.5 5-1 5-3.5 0-2-1.5-3-3-2.5M12 3C7.03 8.97 9 13.5 12 15"/></svg>
+          Eco
+        </button>
+        <button class="chip" data-mode="fan" onclick="setMode('fan')">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"/></svg>
+          Fan
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fan Speed</div>
+      <div class="chip-row">
+        <button class="chip fan-chip" data-fan="auto"   onclick="setFan('auto')">Auto</button>
+        <button class="chip fan-chip" data-fan="low"    onclick="setFan('low')">Low</button>
+        <button class="chip fan-chip" data-fan="medium" onclick="setFan('medium')">Medium</button>
+        <button class="chip fan-chip" data-fan="high"   onclick="setFan('high')">High</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <script>
   let state = { power: 'off', mode: 'cool', temp: 68, fan: 'auto', ambient: null };
 
-  // ── Fetch status ───────────────────────────────────────────────
   async function refresh() {
     try {
       const r = await fetch('/api/status');
@@ -244,9 +343,7 @@
     }
   }
 
-  // ── Send control ───────────────────────────────────────────────
   async function send(payload) {
-    // optimistic update
     Object.assign(state, payload);
     render();
     try {
@@ -258,7 +355,7 @@
       if (!r.ok) {
         const msg = await r.json().catch(() => ({ detail: r.statusText }));
         showError('Error: ' + (msg.detail || r.statusText));
-        refresh(); // revert
+        refresh();
       }
     } catch (e) {
       showError('Network error: ' + e.message);
@@ -266,7 +363,6 @@
     }
   }
 
-  // ── Actions ────────────────────────────────────────────────────
   function togglePower() { send({ power: state.power === 'on' ? 'off' : 'on' }); }
   function adjustTemp(d) {
     const t = Math.min(86, Math.max(60, state.temp + d));
@@ -275,19 +371,15 @@
   function setMode(m) { send({ mode: m }); }
   function setFan(f)  { send({ fan: f }); }
 
-  // ── Render ─────────────────────────────────────────────────────
   function render() {
     const on = state.power === 'on';
-    const btn = document.getElementById('power-btn');
-    btn.classList.toggle('on', on);
+    document.getElementById('power-btn').classList.toggle('on', on);
     document.getElementById('power-label').textContent = on ? 'ON' : 'OFF';
-
     document.getElementById('temp-display').innerHTML = state.temp + '<span>°F</span>';
     document.getElementById('btn-minus').disabled = state.temp <= 60;
     document.getElementById('btn-plus').disabled  = state.temp >= 86;
-    const amb = document.getElementById('ambient');
-    amb.textContent = state.ambient != null ? `Room: ${state.ambient}°F` : '';
-
+    document.getElementById('ambient').textContent =
+      state.ambient != null ? 'Room: ' + state.ambient + '°F' : '';
     document.querySelectorAll('.chip[data-mode]').forEach(el =>
       el.classList.toggle('active', el.dataset.mode === state.mode));
     document.querySelectorAll('.chip[data-fan]').forEach(el =>
@@ -295,21 +387,19 @@
   }
 
   function setStatus(s) {
-    const d = document.getElementById('status-dot');
-    d.className = s;
+    document.getElementById('status-dot').className = s;
+    document.getElementById('status-text').textContent = s === 'ok' ? 'Connected' : 'Disconnected';
   }
   function showError(msg) {
     const b = document.getElementById('error-banner');
-    b.textContent = msg;
-    b.style.display = 'block';
+    b.textContent = msg; b.style.display = 'block';
   }
   function hideError() {
     document.getElementById('error-banner').style.display = 'none';
   }
 
-  // ── Init ───────────────────────────────────────────────────────
   refresh();
-  setInterval(refresh, 30000); // poll every 30s
+  setInterval(refresh, 30000);
 </script>
 </body>
 </html>
