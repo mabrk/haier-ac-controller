@@ -4,7 +4,7 @@ A simple self-hosted web app to control your GE / Haier SmartHQ air conditioner 
 Created as a much more responsive and less fussy replacement to the SmartHQ app
 
 
---- Preview - 
+--- Preview ---
 
 <img width="1121" height="567" alt="image" src="https://github.com/user-attachments/assets/d8486e01-9f4a-4683-ac60-41eaf253a9bf" />
 
