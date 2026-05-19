@@ -1,21 +1,24 @@
 """
-Auth middleware — transparent on LAN, login required from outside.
+Auth middleware — login required for every request (no LAN bypass).
 
-LAN detection uses Python's ipaddress.is_private which covers:
-  10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, ::1, etc.
+A valid `ac_session` cookie binds the session to the configured username via
+HMAC. All unsafe methods (POST/PUT/PATCH/DELETE) also require a matching
+`X-CSRF-Token` header (double-submit against the `ac_csrf` cookie) plus an
+Origin/Referer host check.
 
 TRUSTED_PROXY:  set to your reverse-proxy IP (e.g. "127.0.0.1") when running
                 behind Nginx/Caddy so X-Forwarded-For is used for the real
-                client IP. Leave blank (safe default) for direct exposure.
+                client IP (slowapi rate-limit key only — no longer affects auth).
 SECURE_COOKIES: set to "true" when serving over HTTPS.
 """
 import hashlib
 import hmac
-import ipaddress
+import html
 import logging
 import os
 import secrets
 import time
+from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -24,6 +27,7 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 log = logging.getLogger(__name__)
 
 COOKIE_NAME = "ac_session"
+CSRF_COOKIE = "ac_csrf"
 COOKIE_DAYS = 30
 _MAX_TOKEN_AGE = COOKIE_DAYS * 86400
 
@@ -41,18 +45,19 @@ if not _SECRET:
         "Add SESSION_SECRET=%s to .env to make them persistent.", _SECRET
     )
 
+_WEAK = {"", "admin", "changeme", "password", "root"}
+if AUTH_USERNAME.lower() in _WEAK or AUTH_PASSWORD in _WEAK or len(AUTH_PASSWORD) < 8:
+    log.warning(
+        "AUTH_USERNAME/AUTH_PASSWORD is weak or default — update .env before "
+        "exposing this server beyond localhost."
+    )
+
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-def is_local(ip: str) -> bool:
-    try:
-        return ipaddress.ip_address(ip).is_private
-    except ValueError:
-        return False
-
-
 def get_client_ip(request: Request) -> str:
-    """Return the real client IP, honouring X-Forwarded-For when TRUSTED_PROXY is set."""
+    """Return the real client IP, honouring X-Forwarded-For when TRUSTED_PROXY is set.
+    Used as slowapi's rate-limit key; no longer affects auth decisions."""
     ip = request.client.host if request.client else "127.0.0.1"
     if TRUSTED_PROXY and ip == TRUSTED_PROXY:
         xff = request.headers.get("X-Forwarded-For", "")
@@ -64,26 +69,40 @@ def _sign(value: str) -> str:
     return hmac.new(_SECRET.encode(), value.encode(), hashlib.sha256).hexdigest()
 
 
-def make_token() -> str:
+def make_token(username: str) -> str:
     ts = str(int(time.time()))
-    return f"{ts}.{_sign(ts)}"
+    payload = f"{username}.{ts}"
+    return f"{payload}.{_sign(payload)}"
 
 
-def verify_token(token: str) -> bool:
+def verify_token(token: str) -> str | None:
+    """Return username on success, else None."""
     try:
-        ts, sig = token.split(".", 1)
-        if not hmac.compare_digest(_sign(ts), sig):
-            return False
-        return (time.time() - int(ts)) < _MAX_TOKEN_AGE
-    except Exception:
-        return False
+        username, ts, sig = token.split(".", 2)
+    except ValueError:
+        return None
+    payload = f"{username}.{ts}"
+    if not hmac.compare_digest(_sign(payload), sig):
+        return None
+    if not hmac.compare_digest(username, AUTH_USERNAME):
+        return None
+    try:
+        if (time.time() - int(ts)) >= _MAX_TOKEN_AGE:
+            return None
+    except ValueError:
+        return None
+    return username
+
+
+def make_csrf() -> str:
+    return secrets.token_urlsafe(32)
 
 
 # ── Login page HTML ────────────────────────────────────────────────
 
 def _login_page(error: str = "") -> str:
     err_html = (
-        f'<div class="error">{error}</div>' if error else ""
+        f'<div class="error">{html.escape(error)}</div>' if error else ""
     )
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -91,45 +110,7 @@ def _login_page(error: str = "") -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AC Control — Login</title>
-<style>
-  :root {{
-    --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
-    --accent: #0ea5e9; --text: #e2e8f0; --muted: #64748b;
-  }}
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
-  }}
-  .card {{
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 36px 32px; width: 100%; max-width: 360px;
-  }}
-  h1 {{ font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }}
-  p {{ color: var(--muted); font-size: .85rem; margin-bottom: 28px; }}
-  label {{ display: block; font-size: .75rem; letter-spacing: .08em;
-           text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }}
-  input {{
-    width: 100%; padding: 10px 14px; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--bg);
-    color: var(--text); font-size: .95rem; margin-bottom: 16px; outline: none;
-  }}
-  input:focus {{ border-color: var(--accent); }}
-  button {{
-    width: 100%; padding: 12px; border-radius: 10px; border: none;
-    background: var(--accent); color: #fff; font-size: .95rem;
-    font-weight: 600; cursor: pointer; transition: opacity .15s;
-  }}
-  button:hover {{ opacity: .85; }}
-  .error {{
-    background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3);
-    border-radius: 10px; padding: 10px 14px; color: #fca5a5;
-    font-size: .82rem; margin-bottom: 16px;
-  }}
-</style>
+<link rel="stylesheet" href="/static/login.css">
 </head>
 <body>
 <div class="card">
@@ -155,19 +136,36 @@ _PUBLIC_PATHS = {"/login", "/logout", "/favicon.ico"}
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Always allow login/logout routes
-        if request.url.path in _PUBLIC_PATHS:
+        path = request.url.path
+        if path in _PUBLIC_PATHS or path.startswith("/static/"):
             return await call_next(request)
 
-        # Trusted if request comes from a private/LAN IP
-        client_ip = get_client_ip(request)
-        if is_local(client_ip):
-            return await call_next(request)
-
-        # External: require a valid session cookie
         token = request.cookies.get(COOKIE_NAME)
-        if token and verify_token(token):
-            return await call_next(request)
+        user = verify_token(token) if token else None
+        if not user:
+            if path.startswith("/api/"):
+                return Response(status_code=401)
+            return RedirectResponse(f"/login?next={path}", status_code=303)
 
-        # No valid session — redirect to login
-        return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+        # CSRF: double-submit cookie + Origin/Referer host check for unsafe methods
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            cookie_csrf = request.cookies.get(CSRF_COOKIE, "")
+            header_csrf = request.headers.get("X-CSRF-Token", "")
+            if not cookie_csrf or not hmac.compare_digest(cookie_csrf, header_csrf):
+                return Response("CSRF check failed", status_code=403)
+            origin = request.headers.get("origin") or request.headers.get("referer", "")
+            if origin:
+                netloc = urlparse(origin).netloc
+                host_hdr = request.headers.get("host", "")
+                if netloc and netloc != host_hdr:
+                    return Response("Bad origin", status_code=403)
+
+        response = await call_next(request)
+        # Issue a CSRF cookie if missing (first authenticated GET after login)
+        if not request.cookies.get(CSRF_COOKIE):
+            response.set_cookie(
+                CSRF_COOKIE, make_csrf(),
+                max_age=COOKIE_DAYS * 86400,
+                httponly=False, samesite="lax", secure=SECURE_COOKIES,
+            )
+        return response

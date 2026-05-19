@@ -60,20 +60,32 @@ class SmartHQClient:
             log.warning("SmartHQ connection timed out — continuing in background")
 
     async def stop(self):
+        """Shut everything down within a hard budget.
+
+        gehomesdk's disconnect() can hang on a half-closed websocket after the
+        run-task is cancelled, so every step is bounded by a timeout — we'd
+        rather drop a TCP connection than leave uvicorn stuck on
+        'Waiting for application shutdown'."""
         self._stopping = True
-        if self._task:
+
+        if self._task and not self._task.done():
             self._task.cancel()
             try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
+                await asyncio.wait_for(self._task, timeout=3)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
+
         if self._client:
             try:
-                await self._client.disconnect()
-            except Exception:
-                pass
+                await asyncio.wait_for(self._client.disconnect(), timeout=3)
+            except (asyncio.TimeoutError, Exception):
+                log.debug("SmartHQ disconnect timed out or errored — continuing")
+
         if self._session and not self._session.closed:
-            await self._session.close()
+            try:
+                await asyncio.wait_for(self._session.close(), timeout=2)
+            except (asyncio.TimeoutError, Exception):
+                log.debug("aiohttp session close timed out — continuing")
 
     async def _run(self):
         while not self._stopping:
@@ -138,13 +150,6 @@ class SmartHQClient:
         fan_val   = self._get(a, ErdCode.AC_FAN_SETTING)
         ambient   = self._get(a, ErdCode.AC_AMBIENT_TEMPERATURE)
 
-        raw = {}
-        for code in a.known_properties:
-            try:
-                raw[str(code)] = str(a.get_erd_value(code))
-            except Exception:
-                pass
-
         # Sanitize target temp — SmartHQ occasionally returns junk (e.g. 18xxx)
         # after long idle on fan mode. Clamp to a sane AC range; fall back to
         # last known good value, then 68.
@@ -180,7 +185,6 @@ class SmartHQClient:
             "fan":     _FAN_FROM_ERD.get(fan_val, "auto"),
             "ambient": amb_out,
             "unit":    "F",
-            "raw":     raw,
         }
 
     async def request_refresh(self) -> bool:

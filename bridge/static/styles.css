@@ -1,0 +1,321 @@
+:root {
+  --bg: #0f1117;
+  --card: #1a1d27;
+  --border: #2a2d3a;
+  --accent: #0ea5e9;
+  --accent2: #6366f1;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --on: #22c55e;
+  --off: #ef4444;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px 48px;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0 4px;
+}
+header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: .8rem;
+}
+#status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); transition: background .4s;
+}
+#status-dot.ok  { background: var(--on); }
+#status-dot.err { background: var(--off); }
+
+/* ── Error banner ────────────────────────────────────────── */
+#error-banner {
+  display: none;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: .82rem;
+  color: #fca5a5;
+  margin-bottom: 16px;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+}
+.card-title {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* ── Layout grid ─────────────────────────────────────────── */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+.left-col, .right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Power ───────────────────────────────────────────────── */
+#power-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+}
+#power-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  transition: all .25s;
+  outline: none;
+}
+#power-btn svg { width: 48px; height: 48px; color: var(--muted); transition: color .25s; }
+#power-btn.on {
+  border-color: var(--on);
+  box-shadow: 0 0 36px 6px rgba(34,197,94,.3);
+}
+#power-btn.on svg { color: var(--on); }
+#power-label {
+  margin-top: 14px;
+  font-size: .85rem;
+  color: var(--muted);
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+
+/* ── Temperature ─────────────────────────────────────────── */
+.temp-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+.temp-btn {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.temp-btn:hover:not(:disabled) { background: var(--border); }
+.temp-btn:disabled { opacity: .25; cursor: default; }
+.temp-center { text-align: center; }
+#temp-display {
+  font-size: 3.5rem;
+  font-weight: 200;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+#temp-display span { font-size: 1.2rem; color: var(--muted); vertical-align: super; }
+#ambient {
+  margin-top: 6px;
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+/* ── Chips (mode & fan) ──────────────────────────────────── */
+.chip-row {
+  display: flex;
+  gap: 10px;
+}
+.chip {
+  flex: 1;
+  padding: 12px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all .15s;
+  white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.chip svg { width: 20px; height: 20px; }
+.chip:hover { border-color: var(--text); color: var(--text); }
+.chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(14,165,233,.1);
+}
+.chip.active.fan-chip {
+  border-color: var(--accent2);
+  color: var(--accent2);
+  background: rgba(99,102,241,.1);
+}
+
+/* ── Sleep timer ─────────────────────────────────────────── */
+.timer-card { padding: 12px 16px; }
+.timer-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+}
+.timer-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+.timer-lbl { font-size: .74rem; color: var(--muted); letter-spacing: .05em; flex: 1; }
+.timer-countdown {
+  font-size: .74rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+#timer-cancel {
+  display: none;
+  font-size: .65rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 5px;
+  padding: 1px 6px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+#timer-cancel:hover { border-color: var(--off); color: var(--off); }
+.timer-body {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.timer-body.open { display: flex; }
+.timer-presets { display: flex; gap: 6px; }
+.timer-preset {
+  flex: 1;
+  padding: 6px 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.timer-preset:hover { border-color: var(--text); color: var(--text); }
+.timer-custom { display: flex; gap: 6px; }
+.timer-custom input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: .76rem;
+}
+.timer-custom input::placeholder { color: var(--muted); }
+.timer-custom input:focus { outline: none; border-color: var(--accent); }
+.timer-set {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: .74rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.timer-set:hover { background: rgba(14,165,233,.12); }
+
+/* ── Desktop layout (≥ 720px) ────────────────────────────── */
+@media (min-width: 720px) {
+  body { padding: 36px 48px 60px; }
+
+  .layout {
+    flex-direction: row;
+    align-items: flex-start;
+    max-width: 960px;
+    margin: 0 auto;
+    width: 100%;
+    gap: 16px;
+  }
+
+  .left-col {
+    width: 300px;
+    flex-shrink: 0;
+  }
+
+  .right-col { flex: 1; }
+
+  #power-card { padding: 40px 24px; gap: 0; }
+  #power-btn { width: 130px; height: 130px; }
+  #power-btn svg { width: 56px; height: 56px; }
+
+  #temp-display { font-size: 4.5rem; }
+
+  .chip { padding: 14px 8px; font-size: .85rem; }
+
+  header {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  #error-banner {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+}
+
+/* ── Large desktop (≥ 1200px) ────────────────────────────── */
+@media (min-width: 1200px) {
+  .layout { max-width: 1100px; gap: 20px; }
+  header { max-width: 1100px; }
+  #error-banner { max-width: 1100px; }
+  .left-col { width: 340px; }
+}

@@ -6,10 +6,13 @@ Start:  uvicorn main:app --host 0.0.0.0 --port 8765
 Config: copy .env.example → .env and fill in credentials.
 Open:   http://<server-ip>:8765
 
-Auth:   Automatic — LAN requests pass through freely.
-        External requests require login (AUTH_USERNAME / AUTH_PASSWORD in .env).
+Auth:   Login required for every request. Set AUTH_USERNAME / AUTH_PASSWORD
+        in .env. Put behind an HTTPS reverse proxy (Caddy/Nginx) and set
+        SECURE_COOKIES=true before exposing externally.
 """
 import asyncio
+import hashlib
+import hmac
 import os
 import socket
 import logging
@@ -93,11 +96,12 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("SMARTHQ_USERNAME / SMARTHQ_PASSWORD not set — edit .env and restart.")
 
-    lan_ip    = _get_lan_ip()
-    public_ip = await _get_public_ip()
+    lan_ip = _get_lan_ip()
     log.info("Local  (LAN)  ->  http://%s:8765", lan_ip)
-    if public_ip:
-        log.info("External     ->  http://%s:8765  (needs port 8765 forwarded on router)", public_ip)
+    if os.getenv("ADVERTISE_PUBLIC_IP", "").lower() in ("1", "true", "yes"):
+        public_ip = await _get_public_ip()
+        if public_ip:
+            log.info("External     ->  http://%s:8765  (needs port 8765 forwarded on router)", public_ip)
 
     yield
     if _refresh_task and not _refresh_task.done():
@@ -105,15 +109,20 @@ async def lifespan(app: FastAPI):
     if _timer_task and not _timer_task.done():
         _timer_task.cancel()
     if _client:
-        await _client.stop()
+        try:
+            await asyncio.wait_for(_client.stop(), timeout=10)
+        except asyncio.TimeoutError:
+            log.warning("SmartHQ stop exceeded 10s — abandoning")
+        except Exception:
+            log.exception("SmartHQ stop raised — abandoning")
 
 
 app = FastAPI(title="Haier AC", lifespan=lifespan)
 
 # Auth middleware
 from auth import (AuthMiddleware, AUTH_USERNAME, AUTH_PASSWORD,
-                  COOKIE_NAME, COOKIE_DAYS, SECURE_COOKIES,
-                  make_token, verify_token, get_client_ip, _login_page)
+                  COOKIE_NAME, CSRF_COOKIE, COOKIE_DAYS, SECURE_COOKIES,
+                  make_token, make_csrf, verify_token, get_client_ip, _login_page)
 
 limiter = Limiter(key_func=get_client_ip)
 app.state.limiter = limiter
@@ -127,10 +136,17 @@ class _SecurityHeaders(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "script-src 'self' 'unsafe-inline'"
+            "style-src 'self'; "
+            "script-src 'self'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "base-uri 'none'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'"
         )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if SECURE_COOKIES:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 
@@ -154,6 +170,13 @@ async def login_page():
     return HTMLResponse(_login_page())
 
 
+def _ct_eq(a: str, b: str) -> bool:
+    return hmac.compare_digest(
+        hashlib.sha256(a.encode()).digest(),
+        hashlib.sha256(b.encode()).digest(),
+    )
+
+
 @app.post("/login", include_in_schema=False)
 @limiter.limit("10/minute")
 async def login_submit(
@@ -161,25 +184,35 @@ async def login_submit(
     username: str = Form(...),
     password: str = Form(...),
 ):
-    if username == AUTH_USERNAME and password == AUTH_PASSWORD:
-        next_url = request.query_params.get("next", "/")
-        parsed = urlparse(next_url)
-        if parsed.scheme or parsed.netloc:
-            next_url = "/"
-        response = RedirectResponse(next_url, status_code=303)
-        response.set_cookie(
-            COOKIE_NAME, make_token(),
-            max_age=COOKIE_DAYS * 86400,
-            httponly=True, samesite="lax", secure=SECURE_COOKIES,
-        )
-        return response
-    return HTMLResponse(_login_page("Incorrect username or password."), status_code=401)
+    if not (_ct_eq(username, AUTH_USERNAME) and _ct_eq(password, AUTH_PASSWORD)):
+        return HTMLResponse(_login_page("Incorrect username or password."), status_code=401)
+
+    next_url = request.query_params.get("next", "/")
+    if (not next_url.startswith("/")) or next_url.startswith("//") or next_url.startswith("/\\"):
+        next_url = "/"
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc:
+        next_url = "/"
+
+    response = RedirectResponse(next_url, status_code=303)
+    response.set_cookie(
+        COOKIE_NAME, make_token(AUTH_USERNAME),
+        max_age=COOKIE_DAYS * 86400,
+        httponly=True, samesite="lax", secure=SECURE_COOKIES,
+    )
+    response.set_cookie(
+        CSRF_COOKIE, make_csrf(),
+        max_age=COOKIE_DAYS * 86400,
+        httponly=False, samesite="lax", secure=SECURE_COOKIES,
+    )
+    return response
 
 
 @app.get("/logout", include_in_schema=False)
 async def logout():
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(CSRF_COOKIE)
     return response
 
 
@@ -193,17 +226,20 @@ async def index():
 # ── API ───────────────────────────────────────────────────────────
 
 @app.get("/api/devices")
-async def list_devices():
+@limiter.limit("30/minute")
+async def list_devices(request: Request):
     return _require_client().list_devices()
 
 
 @app.get("/api/status")
-async def get_status():
+@limiter.limit("120/minute")
+async def get_status(request: Request):
     c = _require_client()
     try:
         return c.get_status()
-    except RuntimeError as e:
-        raise HTTPException(503, str(e))
+    except RuntimeError:
+        log.exception("get_status failed")
+        raise HTTPException(503, "Device temporarily unavailable")
 
 
 class ControlRequest(BaseModel):
@@ -214,14 +250,16 @@ class ControlRequest(BaseModel):
 
 
 @app.post("/api/control")
-async def control(req: ControlRequest):
+@limiter.limit("30/minute")
+async def control(request: Request, req: ControlRequest):
     c = _require_client()
     if not any([req.power, req.mode, req.temp, req.fan]):
         raise HTTPException(400, "Provide at least one field to change")
     try:
         return await c.control(req.power, req.mode, req.temp, req.fan)
-    except RuntimeError as e:
-        raise HTTPException(503, str(e))
+    except RuntimeError:
+        log.exception("control failed")
+        raise HTTPException(503, "Device temporarily unavailable")
 
 
 # ── Sleep timer ───────────────────────────────────────────────
@@ -256,12 +294,14 @@ class TimerRequest(BaseModel):
 
 
 @app.get("/api/timer")
-async def get_timer():
+@limiter.limit("120/minute")
+async def get_timer(request: Request):
     return _timer_status()
 
 
 @app.post("/api/timer")
-async def set_timer(req: TimerRequest):
+@limiter.limit("30/minute")
+async def set_timer(request: Request, req: TimerRequest):
     global _timer_task, _timer_ends_at
     if _timer_task and not _timer_task.done():
         _timer_task.cancel()
